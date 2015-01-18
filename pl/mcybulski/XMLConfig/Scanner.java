@@ -9,6 +9,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 
 /**
  * Created by Mikołaj on 2014-12-22.
@@ -23,13 +24,14 @@ public class Scanner {
     public Scanner(String path) {
         try {
             fileInputStream = new FileInputStream(path);
-            //InputStreamReader
-            int b = fileInputStream.read();
+            InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, Charset.forName("ISO-8859-2"));
+
+            int b = inputStreamReader.read();
             StringBuilder stringBuilder = new StringBuilder();
 
             while(b != -1) {
                 stringBuilder.append((char)b);
-                b = fileInputStream.read();
+                b = inputStreamReader.read();
             }
 
             fileContent = stringBuilder.toString();
@@ -41,68 +43,86 @@ public class Scanner {
     }
 
     public Token getNextToken() throws UnrecognizedTokenException {
-        Token ret = readProlog();
+        try {
+            Token ret = readXMLSTag();
+            if (ret != null) {
+                return ret;
+            }
+            ret = readXMLETag();
 
-        if (ret != null) {
-            return ret;
+            if (ret != null) {
+                return ret;
+            }
+            ret = readVersionAttribute();
+
+            if (ret != null) {
+                return ret;
+            }
+
+            ret = readSTag();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readTypeAttribute();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readArrayAttribute();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readEquals();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readType();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readVersion();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readTagName();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readETag();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readValue();
+
+            if (ret != null) {
+                return ret;
+            }
+            ret = readSlash();
+
+            if (ret != null) {
+                return ret;
+            }
+        } catch (IndexOutOfBoundsException e) {
+            if (fileContent.trim().length() == 0) {
+                return new Token(TokenType.EOF, "");
+            } else {
+                throw new UnrecognizedTokenException();
+            }
         }
-        ret = readSConfig();
 
-        if (ret != null) {
-            return ret;
-        }
-        ret = readEConfig();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readSTag();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readTypeAttribute();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readArrayAttribute();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readEquals();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readType();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readTagName();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readETag();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readValue();
-
-        if (ret != null) {
-            return ret;
-        }
-        ret = readSlash();
-
-        if (ret != null) {
-            return ret;
+        if (fileContent.trim().length() == 0) {
+            return new Token(TokenType.EOF, "");
+        } else {
+            throw new UnrecognizedTokenException();
         }
 
-        throw new UnrecognizedTokenException();
     }
 
     private Token readSlash() {
@@ -226,16 +246,92 @@ public class Scanner {
         return new Token(TokenType.NAME, stringBuilder.toString());
     }
 
-    private Token readProlog() {
+    private Token readXMLSTag() {
         String openingTag = "<?xml";
-        String version = "version";
-        String endingTag = "?>";
 
         if (!fileContent.startsWith(openingTag)){
             return null;
         }
 
-        int i = nextNonWhiteSpaceCharNo(openingTag.length() - 1);
+        fileContent = fileContent.substring(openingTag.length());
+
+        return new Token(TokenType.XMLSTAG, openingTag);
+    }
+
+    private Token readVersionAttribute() {
+        int charNo = getFirstSymbolNo();
+        String type = "version";
+
+        if ( !(fileContent.startsWith(type, charNo) && nextLogicalSign(charNo) == '=') )  {
+            return null;
+        }
+
+        fileContent = fileContent.substring(charNo + type.length());
+
+        return new Token(TokenType.VERSION_ATTRIBUTE, type);
+    }
+
+    //private Token readAttributeValue()
+    private Token readVersion() {
+        int i = 0;
+        if (Character.isWhitespace(fileContent.charAt(i))) {
+            i = nextNonWhiteSpaceCharNo(0);
+        }
+        StringBuilder stringBuilder = new StringBuilder();
+
+        if (fileContent.charAt(i) == '\'') {
+            i = i + 1;
+            while (i < fileContent.length()) {
+                char ch = fileContent.charAt(i);
+                if (ch == '\'') {
+                    break;
+                } else if (ch == '\"') {
+                    return null;
+                }
+                stringBuilder.append(fileContent.charAt(i));
+                i++;
+            }
+        } else if (fileContent.charAt(i) == '\"') {
+            i = i + 1;
+            while (i < fileContent.length()) {
+                char ch = fileContent.charAt(i);
+                if (ch == '\"') {
+                    break;
+                } else if (ch == '\'') {
+                    return null;
+                }
+                stringBuilder.append(fileContent.charAt(i));
+                i++;
+            }
+        } else {
+            return null;
+        }
+
+        i++;
+        fileContent = fileContent.substring(i);
+
+        return new Token(TokenType.VERSION, stringBuilder.toString());
+    }
+
+    private Token readXMLETag() {
+        String endingTag = "?>";
+
+        if (!fileContent.startsWith(endingTag)){
+            return null;
+        }
+
+        fileContent = fileContent.substring(endingTag.length());
+
+        return new Token(TokenType.XMLETAG, endingTag);
+    }
+
+    private Token readProlog() {
+
+        String version = "version";
+        String endingTag = "?>";
+
+
+        int i = nextNonWhiteSpaceCharNo(endingTag.length() - 1);
 
         if (!(fileContent.startsWith(version, i) &&
                 nextNonWhiteSpaceChar(i + version.length() - 1) == '=')) {
@@ -380,7 +476,6 @@ public class Scanner {
         for (int i = start; i < fileContent.length(); i++) {
             char actual = fileContent.charAt(i);
 
-            //@todo Aby napewno wszytskie?
             if (actual == '<' || actual == '>' || actual == '/' || actual == '\'' || actual == '\"' || actual == '='){
                 return actual;
             }

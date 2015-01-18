@@ -9,19 +9,22 @@ import pl.mcybulski.XMLConfig.exceptions.ValueParsingException;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 
 /**
- * @TODO Obuduj dobrze wyjątkami!!
+ *
  * Created by Mikołaj on 2014-12-22.
  */
 public class Parser {
 
-    public final static String KOMUNIKAT = "Wystąpił bliżej nieokreślony błąd";
     private Scanner scanner;
+    private Queue<Token> tokenBuffer;
 
     public Parser(String path) {
         scanner = new Scanner(path);
+        tokenBuffer = new LinkedList<>();
     }
 
     /**
@@ -32,120 +35,152 @@ public class Parser {
      */
     public Configuration parseXML() throws Exception {
 
-        Configuration config = new Configuration();
-        if (!parseProlog());
-        if ( !scanner.getNextToken().getTokenType().equals(TokenType.PROLOG ) ) {
-            throw new ImproperGrammaticalException("Brak prologa");
+        Configuration config;
+
+        parseProlog();
+
+        Token nameToken = readNamePartFromTag();
+
+        if ( nameToken == null ) {
+            throw new ImproperGrammaticalException("Brak wymaganego elementu");
+        } else if ( !nameToken.getValue().equals("Config") ) {
+            throw new ImproperGrammaticalException("Pierwszy element ma nazwę różną od 'Config'");
         }
 
-        if ( !scanner.getNextToken().getTokenType().equals(TokenType.SCONFIG) ) {
-            throw new ImproperGrammaticalException("Brak startowego tagu <Config>");
+        config = (Configuration)readConfigTags(nameToken).getValue();
+
+        if (!getNextToken().getTokenType().equals(TokenType.EOF)) {
+            throw new ImproperGrammaticalException("Smieci na końcu pliku");
         }
-
-        Token nextToken = scanner.getNextToken();
-    bool parseConfigOpen()
-        {
-
-            if (token==STAG)
-            {
-                getNextToken();
-                if (token==NAME && token.value=="Config")
-                {
-
-                    getNextToken();
-                    if token==ETAG)
-                        return true;
-                }
-            }
-
-            return false
-        }
-        while ( !nextToken.getTokenType().equals(TokenType.ECONFIG) ) {
-
-            if ( nextToken.getTokenType().equals(TokenType.STAG) ) {
-
-                Token nameToken = scanner.getNextToken();
-
-                if ( nameToken.getTokenType().equals(TokenType.NAME) ) {
-
-                    nextToken = scanner.getNextToken();
-
-                    if ( nextToken.getTokenType().equals(TokenType.TYPE_ATTRIBUTE) ) {
-                        Parameter newParameter = readTypedTags(nameToken);
-                        config.addParameter(newParameter.getKey(), newParameter.getValue());
-
-                    } else if ( nextToken.getTokenType().equals(TokenType.ARRAY_ATTRIBUTE) ) {
-                        Parameter newParameter = readArrayTags(nameToken);
-                        config.addParameter(newParameter.getKey(), newParameter.getValue());
-
-                    } else if ( nextToken.getTokenType().equals(TokenType.ETAG) ) {
-                        Configuration configuration = readConfigTags(nameToken);
-                        config.addParameter(nameToken.getValue(), configuration);
-
-                    } else {
-                        throw new ImproperGrammaticalException("Nieprawidłowo określony obiekt - po <" + nameToken.getValue()
-                                + " mogą wystąpić tylko 'type', 'array' lub '>'");
-                    }
-
-                } else {
-                    throw new ImproperGrammaticalException("Brak nazwy po znaku <");
-                }
-            }
-            nextToken = scanner.getNextToken();
-        }
-
 
         return config;
     }
 
-    private Configuration readConfigTags(Token name) throws Exception {
+    private void parseProlog() throws UnrecognizedTokenException, ImproperGrammaticalException {
+
+        if ( !getNextToken().getTokenType().equals(TokenType.XMLSTAG) ) {
+            throw new ImproperGrammaticalException("Brak rozpoczęcia taga prologa '<?xml'");
+        }
+
+        if ( !getNextToken().getTokenType().equals(TokenType.VERSION_ATTRIBUTE) ) {
+            throw new ImproperGrammaticalException("Brak atrybutu version w prologu");
+        }
+
+        if ( !getNextToken().getTokenType().equals(TokenType.EQUALS) ) {
+            throw new ImproperGrammaticalException("Brak znaku '=' po atrybucie version w proogu");
+        }
+
+        Token version = getNextToken();
+
+        if ( !version.getTokenType().equals(TokenType.VERSION) ) {
+            throw new ImproperGrammaticalException("Brak wartości wersji w atrybucie version w prologu");
+        }
+
+        String versionValue = version.getValue();
+
+        if ( !"1.0".equals(versionValue) && !"1.1".equals(versionValue) ) {
+            throw new ImproperGrammaticalException("Niepoprawna wersja xml dokumentu - wartości poprawne to 1.0 lub 1.1");
+        }
+
+        if ( !getNextToken().getTokenType().equals(TokenType.XMLETAG) ) {
+            throw new ImproperGrammaticalException("Brak poprawnego zakończenia taga prologu");
+        }
+    }
+
+    //@TODO Moze być kłopot
+    private Token readNamePartFromTag() throws UnrecognizedTokenException, ImproperGrammaticalException {
+        Token nextToken = getNextToken();
+
+        if ( !nextToken.getTokenType().equals(TokenType.STAG) ) {
+            tokenBuffer.add(nextToken);
+            return null;
+        }
+
+        Token nameToken = getNextToken();
+
+        if ( !nameToken.getTokenType().equals(TokenType.NAME) && !nameToken.getTokenType().equals(TokenType.SLASH)) {
+            throw new ImproperGrammaticalException("Brak nazwy po rozpoczęciu taga");
+        } else if (nameToken.getTokenType().equals(TokenType.SLASH)) {
+            tokenBuffer.add(nameToken);
+            return null;
+        } else {
+            return nameToken;
+        }
+    }
+
+    private Token getNextToken() throws UnrecognizedTokenException {
+        Token ret = tokenBuffer.poll();
+        if (ret != null) {
+            return ret;
+        } else {
+            return scanner.getNextToken();
+        }
+    }
+
+    /**
+     *
+     * @param name
+     * @return
+     * @throws Exception
+     */
+    private Parameter readConfigTags(Token name) throws Exception {
         try {
             Configuration config = new Configuration();
 
-            Token nextToken = scanner.getNextToken();
+            Token nextToken = getNextToken();
+
+            if ( !nextToken.getTokenType().equals(TokenType.ETAG) ) {
+                tokenBuffer.add(nextToken);
+                return null;
+            }
 
             while (true) {
-
-                if (nextToken.getTokenType().equals(TokenType.STAG)) {
-
-                    Token nameToken = scanner.getNextToken();
-
-                    if (nameToken.getTokenType().equals(TokenType.NAME)) {
-
-                        nextToken = scanner.getNextToken();
-
-                        if (nextToken.getTokenType().equals(TokenType.TYPE_ATTRIBUTE)) {
-                            Parameter newParameter = readTypedTags(nameToken);
-                            config.addParameter(newParameter.getKey(), newParameter.getValue());
-
-                        } else if (nextToken.getTokenType().equals(TokenType.ARRAY_ATTRIBUTE)) {
-                            Parameter newParameter = readArrayTags(nameToken);
-                            config.addParameter(newParameter.getKey(), newParameter.getValue());
-
-                        } else if (nextToken.getTokenType().equals(TokenType.ETAG)) {
-                            Configuration configuration = readConfigTags(nameToken);
-                            config.addParameter(nameToken.getValue(), configuration);
-
-                        } else {
-                            throw new ImproperGrammaticalException("Nieprawidłowo określony obiekt - po <" + nameToken.getValue()
-                                    + " mogą wystąpić tylko 'type', 'array' lub '>'");
-                        }
-
-                    } else if (nameToken.getTokenType().equals(TokenType.SLASH)) {
-                        nameToken = scanner.getNextToken();
-
-                        if (nameToken.equals(name) && scanner.getNextToken().getTokenType().equals(TokenType.ETAG)) {
-                            return config; //zakonczone na </name> -->
-                        } else {
-                            throw new ImproperGrammaticalException("Brak nazwy w końcowym tagu, niezgodna nazwa względem tagu początkowego lub brak '>' po nazwie");
-                        }
-                    }
-
-                } else {
-                    throw new ImproperGrammaticalException("Nie znaleziono rozpoczęcia kolejnego taga, a dokument nie jest jeszcze zakończony");
+                Token parameterNameToken = readNamePartFromTag();
+                if (parameterNameToken == null) {
+                    break;
                 }
-                nextToken = scanner.getNextToken();
+
+                Parameter parameter;
+
+                parameter = readTypedTags(parameterNameToken);
+
+                if (parameter != null) {
+                    config.addParameter(parameter.getKey(), parameter.getValue());
+                    continue;
+                }
+
+                parameter = readArrayTags(parameterNameToken);
+
+                if (parameter != null) {
+                    config.addParameter(parameter.getKey(), parameter.getValue());
+                    continue;
+                }
+
+                parameter = readConfigTags(parameterNameToken);
+
+                if (parameter != null) {
+                    config.addParameter(parameter.getKey(), parameter.getValue());
+                    continue;
+                }
+
+                throw new ImproperGrammaticalException("Nieprawidłowo określony obiekt - po <" + parameterNameToken.getValue()
+                        + " mogą wystąpić tylko 'type', 'array' lub '>'");
             }
+
+            nextToken = getNextToken();
+
+            if ( !nextToken.getTokenType().equals(TokenType.SLASH)) {
+                throw new ImproperGrammaticalException("Niepoprawny tag końcowy - brak '/'");
+            }
+
+            Token nameToken = getNextToken();
+
+            if (nameToken.equals(name) && getNextToken().getTokenType().equals(TokenType.ETAG)) {
+                return new Parameter(name.getValue(), config); //zakonczone na </name> -->
+            } else {
+                throw new ImproperGrammaticalException("Brak nazwy w końcowym tagu, niezgodna nazwa względem tagu początkowego lub brak '>' po nazwie");
+            }
+
         } catch (Exception e) {
             throw new Exception(name.getValue() + ": " + e.getMessage(), e);
         }
@@ -167,25 +202,32 @@ public class Parser {
     private Parameter readTypedTags(Token name) throws Exception {
 
         try {
-            Token nextToken = scanner.getNextToken();
+            Token nextToken = getNextToken();
+
+            if (!nextToken.getTokenType().equals(TokenType.TYPE_ATTRIBUTE)) {
+                tokenBuffer.add(nextToken);
+                return null;
+            }
+
+            nextToken = getNextToken();
 
             if (!nextToken.getTokenType().equals(TokenType.EQUALS)) {
                 throw new ImproperGrammaticalException("Brak znaku '=' po type");
             }
 
-            Token typeToken = scanner.getNextToken();
+            Token typeToken = getNextToken();
 
             if (!typeToken.getTokenType().equals(TokenType.TYPE)) {
                 throw new ImproperGrammaticalException("Brak typu po znaku '='");
             }
 
-            nextToken = scanner.getNextToken();
+            nextToken = getNextToken();
 
             if (!nextToken.getTokenType().equals(TokenType.ETAG)) {
                 throw new ImproperGrammaticalException("Brak domkniecia poczatkowego taga '>'");
             }
 
-            Token valueToken = scanner.getNextToken();
+            Token valueToken = getNextToken();
 
             if (!valueToken.getTokenType().equals(TokenType.VALUE) && !typeToken.getValue().equals(TYPES.NULL)) {
                 throw new ImproperGrammaticalException("Brak wartosci elementu po początkowym tagu");
@@ -198,20 +240,20 @@ public class Parser {
                     throw new ImproperGrammaticalException("Nieprawidłowa struktura obiektu typu null - nie wykryto '<' po znaku '>'");
                 }
             } else {
-                nextToken = scanner.getNextToken();
+                nextToken = getNextToken();
 
                 if (!nextToken.getTokenType().equals(TokenType.STAG)) {
                     throw new ImproperGrammaticalException("Brak otwarcia końcowego taga '<'");
                 }
             }
 
-            nextToken = scanner.getNextToken();
+            nextToken = getNextToken();
 
             if (!nextToken.getTokenType().equals(TokenType.SLASH)) {
                 throw new ImproperGrammaticalException("Brak '/' po znaku '<' w końcowym tagu");
             }
 
-            Token nameToken = scanner.getNextToken();
+            Token nameToken = getNextToken();
 
             if (!nameToken.getTokenType().equals(TokenType.NAME)) {
                 throw new ImproperGrammaticalException("Brak nazwy elementu w końcowym tagu po znakach '</'");
@@ -221,7 +263,7 @@ public class Parser {
                 throw new ImproperGrammaticalException("Niezgodna nazwa elementu w końcowym tagu względem początkowego");
             }
 
-            nextToken = scanner.getNextToken();
+            nextToken = getNextToken();
 
             if (!nextToken.getTokenType().equals(TokenType.ETAG)) {
                 throw new ImproperGrammaticalException("Brak zakończenia końcowego taga '>'");
@@ -236,13 +278,20 @@ public class Parser {
 
     private Parameter readArrayTags(Token name) throws Exception {
         try {
-            Token nextToken = scanner.getNextToken();
+            Token nextToken = getNextToken();
+
+            if (!nextToken.getTokenType().equals(TokenType.ARRAY_ATTRIBUTE)) {
+                tokenBuffer.add(nextToken);
+                return null;
+            }
+
+            nextToken = getNextToken();
 
             if (!nextToken.getTokenType().equals(TokenType.EQUALS)) {
                 throw new ImproperGrammaticalException("Brak rowna sie");
             }
 
-            Token typeToken = scanner.getNextToken();
+            Token typeToken = getNextToken();
 
             if (!typeToken.getTokenType().equals(TokenType.TYPE)) {
                 throw new ImproperGrammaticalException("Brak typu po rowna sie");
@@ -252,7 +301,7 @@ public class Parser {
                 throw new ImproperGrammaticalException("Typ null niedozwolony dla wartości w tablicy");
             }
 
-            nextToken = scanner.getNextToken();
+            nextToken = getNextToken();
 
             if (!nextToken.getTokenType().equals(TokenType.ETAG)) {
                 throw new ImproperGrammaticalException("Brak domkniecia poczatkowego taga");
@@ -260,13 +309,13 @@ public class Parser {
 
             //Startuja wartosci
 
-            nextToken = scanner.getNextToken();
+            nextToken = getNextToken();
 
             if (!nextToken.getTokenType().equals(TokenType.STAG)) {
                 throw new ImproperGrammaticalException("Nieoczekiwany token po deklaracji tablicy");
             }
 
-            nextToken = scanner.getNextToken();
+            nextToken = getNextToken();
 
             List<Object> values = new ArrayList<>();
 
@@ -274,18 +323,18 @@ public class Parser {
                 Object element = readArrayElement(nextToken, typeToken);
                 values.add(element);
 
-                nextToken = scanner.getNextToken();
+                nextToken = getNextToken();
 
                 if ( !nextToken.getTokenType().equals(TokenType.STAG) ) {
                     throw new ImproperGrammaticalException("Niespodziewany token po odczytaniu elementu tablicy");
                 }
 
-                nextToken = scanner.getNextToken();
+                nextToken = getNextToken();
             }
 
             //Koncowy tag jest </ -->
 
-            Token nameToken = scanner.getNextToken();
+            Token nameToken = getNextToken();
 
             if (!nameToken.getTokenType().equals(TokenType.NAME)) {
                 throw new ImproperGrammaticalException("Brak nazwy elementu w końcowym tagu");
@@ -295,7 +344,7 @@ public class Parser {
                 throw new ImproperGrammaticalException("Niezgodna nazwa elementu w końcowym tagu tablicy względem początkowego");
             }
 
-            nextToken = scanner.getNextToken();
+            nextToken = getNextToken();
 
             if (!nextToken.getTokenType().equals(TokenType.ETAG)) {
                 throw new ImproperGrammaticalException("Brak zakończenia końcowego taga tablicy");
@@ -316,13 +365,13 @@ public class Parser {
             throw new ImproperGrammaticalException("Brak value w nazwie początkowego taga elementu tablicy");
         }
 
-        nextToken = scanner.getNextToken();
+        nextToken = getNextToken();
 
         if ( !nextToken.getTokenType().equals(TokenType.ETAG) ) {
             throw new ImproperGrammaticalException("Brak zamknięcia początkowego taga elementu tablicy");
         }
 
-        Token valueToken = scanner.getNextToken();
+        Token valueToken = getNextToken();
 
         if ( !valueToken.getTokenType().equals(TokenType.VALUE) ) {
             throw new ImproperGrammaticalException("Brak wartości w elemencie tablicy");
@@ -330,25 +379,25 @@ public class Parser {
 
         Object value = parseValue(typeToken, valueToken);
 
-        nextToken = scanner.getNextToken();
+        nextToken = getNextToken();
 
         if ( !nextToken.getTokenType().equals(TokenType.STAG) ) {
             throw new ImproperGrammaticalException("Brak otwarcia końcowego taga elementu tablicy");
         }
 
-        nextToken = scanner.getNextToken();
+        nextToken = getNextToken();
 
         if ( !nextToken.getTokenType().equals(TokenType.SLASH) ) {
             throw new ImproperGrammaticalException("Brak slasha końcowego taga elementu tablicy");
         }
 
-        nextToken = scanner.getNextToken();
+        nextToken = getNextToken();
 
         if ( !nextToken.equals(new Token(TokenType.NAME, "value")) ) {
             throw new ImproperGrammaticalException("Brak value w nazwie końcowego taga elementu tablicy");
         }
 
-        nextToken = scanner.getNextToken();
+        nextToken = getNextToken();
 
         if ( !nextToken.getTokenType().equals(TokenType.ETAG) ) {
             throw new ImproperGrammaticalException("Brak value w nazwie końcowego taga elementu tablicy");
@@ -421,9 +470,9 @@ public class Parser {
         boolean commaFound = false;
 
         for (int i = 0; i < value.length(); i++) {
-            char ch = value.charAt(i);
+            char charAt = value.charAt(i);
             if (i == 0) {
-                if (new BigDecimal(0).equals(recognizeDigit(ch))) {
+                if (new BigDecimal(0).equals(recognizeDigit(charAt))) {
                     if (value.length() != 1) {
                         if (value.charAt(i + 1) != '.') {
                             throw new ValueParsingException("Po cyfrze 0 może wystąpić tylko '.' i dalsze cyfry");
@@ -431,21 +480,21 @@ public class Parser {
                     }
 
                 } else {
-                    if (recognizeDigit(ch) == null) {
+                    if (recognizeDigit(charAt) == null) {
                         throw new ValueParsingException("Nie rozpoznano cyfry na pierwszym miejscu wartośći");
                     } else {
-                        bigDecimal = recognizeDigit(ch);
+                        bigDecimal = recognizeDigit(charAt);
                     }
                 }
 
             } else {
-                if (recognizeDigit(ch) != null) {
+                if (recognizeDigit(charAt) != null) {
                     bigDecimal = bigDecimal.multiply(new BigDecimal(10));
-                    bigDecimal = bigDecimal.add(recognizeDigit(ch));
-                } else if (ch == '.' && !commaFound) {
+                    bigDecimal = bigDecimal.add(recognizeDigit(charAt));
+                } else if (charAt == '.' && !commaFound) {
                     digitsAfterComma = value.length() - i - 1;
                     commaFound = true;
-                } else if (ch == '.') {
+                } else if (charAt == '.') {
                     throw new ValueParsingException("W wartości występuje więcej niż jedna kropka");
                 } else {
                     throw new ValueParsingException("Nie rozpoznano cyfry, ani znaku '.'");
