@@ -1,0 +1,113 @@
+Mikołaj Cybulski
+TKOM – dokumentacja końcowa
+Serializer i deserializer ustawień konfiguracyjnych XML<->Java
+1.	Założenia
+
+Celem projektu jest utworzenie biblioteki, która będzie umożliwiać zapisywanie oraz odczytywanie ustwień konfiguracji w plikach XML na potrzeby aplikacji napisanej w Javie.
+
+1.1	Gramatyka:
+
+digitWoutZero 	= "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" 
+digit 		= "0" | digitWoutZero 
+char 		= Unicode characters w-out "<" "&" ">" 
+letter 		= a-z | A-Z 
+prolog 		= "<?xml version=" , version , "?>"
+version 		= (""" , versionNo , """) | ("'" , versionNo , "'")
+versionNo	= digitWoutZero , "." , digit
+name		= (letter | "_") , {letter | digit | "_"} 
+
+document	= prolog , "<Config>" , element , "</Config>"
+type		= "string" | "int" | "double" | "float" | "null" | "boolean"
+value		= char*
+namePart	= "<" , name
+element	= ( namePart , (configTag | typedTag | arrayTag) )*
+typedTag	= "type=" , (""", type , """) | ("'", type , "'") , ">" , value , "</" , name , ">"
+configTag	= ">" , element , "</" , name , ">"
+arrayTag	= "array=" , (""", type , """) | ("'", type , "'") , ">" , {arrayElem} , "</" , name , ">"
+arrayElem	= "<value>" , value , </value>
+
+1.2	Zakładana funkcjonalność
+
+Wymagania funkcjonalne:
+
+•	Tworzenie obiektu, który w ramach programu będzie przechowywał konfigurację w postaci klucz – wartość
+•	Możliwość dodawania, usuwania i modyfikcji par klucz-wartość w obiekcie przechowującym konfigurację
+•	Serializacja obiektu przechowującego konfigurację do poprawnego pliku XML
+•	Deserializacja pliku XML zawierającego konfigurację do obiektu przechowującego konfigurację w aplikacji
+
+
+
+Opis funkcjonalości:
+	
+	Zakładam, że będzie istniała instancja obiektu przechowująca konfigurację i ona będzie zawierała interfejsy pozwalające użytkownikowi załadowanie pliku XML z konfiguracją, zapis bierzących konfiguracji do pliku xml, dodawanie kolejnych wartości klucz-wartość i ich edycję.
+	Wartości będą mogły być następujących typów:
+•	Łańcuchy znakowe
+•	Liczby (int, double, float, long)
+•	Null
+•	Boolean
+•	Obiekt z zagnieżdżonymi wartościami konfiguracyjnymi
+•	Tablice wartości
+
+W celu rozróżniania typów planuje wykorzystać atrybut w tagu – przykładowo type=”string” i na tej podstawie interpretować dane.
+
+2.	Projekt realizacji
+
+Przetwarzanie konfiguracji planuję skupić w 3 modułach:
+
+•	Serializer – Będzie modułem, który zamieni obiekt przechowujący konfigurację w strukturę możliwą do zapisania w poprawnie sformatowanym pliku XML
+•	Scanner – Moduł ten będzie odpowiedzialny za wczytanie pliku XML i przetworzenie jego treści w tokeny
+•	Parser – Będzie odpowiedzialny za pobranie kolejnych tokenów ze Scannera i interpretację na obiekty będące elementami obiektu przechowującego całą konfigurację
+
+ 
+
+W celu zagnieżdżania pól konfiguracyjnych będzie utworzony specjalny obiekt konfiguracyjny, który można dodawać jako element konfiguracji.
+Będzię istnieć główna klasa reprezentująca konfigurację i udostępniająca interfejs dla użytkownika.
+
+Tokeny:
+
+•	XMLSTAG - <?xml
+•	VERSION_ATTRIBUTE – version
+•	VERSION – 1.0, 1.1
+•	XMLETAG - ?>
+•	STAG – znak ‘<’
+•	ETAG – znak ‘>’
+•	NAME – Nazwa taga/obiektu
+•	TYPE_ATTRIBUTE – atrybut type
+•	EQUALS – znak ‘=’
+•	TYPE – typ obiektu np. String, boolean
+•	VALUE – wartość przechowywana w tagu
+•	SLASH – ‘/’
+•	ARRAY_ATTRIBUTE – atrybut array
+
+W ramach instancji głównego obiektu biblioteki wartośći będą przechowywane w obiekcie klasy Configuration, który będzie posiadał LinkedHashMap<String, Object> w celu przechowywania par klucz-wartość z zachowaniem pierwotnej kolejności. Wartością będzie mógł być obiekt Configuration co umożliwi zagnieżdżanie konfiguracji. Typy będą rozróżniane za pomocą mechanizmu refleksji, a w przypadku deserializacji za pomocą atrybutu type.
+
+Parser odpytuje Scanner o kolejne Tokeny i na bierząco interpretuje ich znaczenie i tworzy odpowiednie obiekty konfiguracyjne dołączając je do Mapy. Na końcu zwracając cały obiekt klasy Configuration.
+3.	Testowanie
+
+W celu przetestowania funkcjonalności biblioteki planuję wykorzystać testy jednostkowe, które najpier odczytają zawartość pliku .xml, zostanie wyświetlona wczytana struktura klucz-wartość, następnie jeden z parametrów zostanie zmodyfikowany i zostanie wywołana metoda serializującą. Na koniec nastąpi wzrokowa kontrola poprawności działania na podstawie plików .xml.
+
+
+Przykładowy plik XML:
+
+<?xml version="1.0"?>
+<Config>
+    <DataFlow>
+        <SettingsFile type="string">C:/Windows/conf.cfg</SettingsFile>
+		<Karnival type="null"></Karnival>
+        <Version type="string">1.2</Version>
+        <MinValue type="double">3456.78</MinValue>
+    </DataFlow>
+    <BestModule>
+        <Values array="int">
+			<value>32</value>
+			<value>33</value>
+			<value>34</value>
+        </Values>
+		<Lipnica>
+			<SettingsFile type="string">C:/Windows/conf.cfg</SettingsFile>
+			<Karnival type="null"></Karnival>
+			<Version type="string">1.2</Version>
+			<MinValue type="double">3456.78</MinValue>
+		</Lipnica>
+    </BestModule>
+</Config>
