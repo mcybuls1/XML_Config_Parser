@@ -21,27 +21,6 @@ public class Scanner {
     private String fileContent;
 
 
-    public Scanner(String path) {
-        try {
-            fileInputStream = new FileInputStream(path);
-            InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, Charset.forName("ISO-8859-2"));
-
-            int b = inputStreamReader.read();
-            StringBuilder stringBuilder = new StringBuilder();
-
-            while(b != -1) {
-                stringBuilder.append((char)b);
-                b = inputStreamReader.read();
-            }
-
-            fileContent = stringBuilder.toString();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
     public Token getNextToken() throws UnrecognizedTokenException {
         try {
             Token ret = readXMLSTag();
@@ -377,34 +356,6 @@ public class Scanner {
         return new Token(TokenType.PROLOG, ret);
     }
 
-    private Token readSConfig() {
-        String SConfig = "<Config>";
-        int charNo = getFirstSymbolNo();
-
-        if (!fileContent.startsWith(SConfig, charNo)) {
-            return null;
-        }
-
-        String ret = fileContent.substring(charNo, charNo + SConfig.length());
-        fileContent = fileContent.substring(charNo + SConfig.length());
-
-        return new Token(TokenType.SCONFIG, ret);
-    }
-
-    private Token readEConfig() {
-        String EConfig = "</Config>";
-        int charNo = getFirstSymbolNo();
-
-        if (!fileContent.startsWith(EConfig, charNo)) {
-            return null;
-        }
-
-        String ret = fileContent.substring(charNo, charNo + EConfig.length());
-        fileContent = fileContent.substring(charNo + EConfig.length());
-
-        return new Token(TokenType.ECONFIG, ret);
-    }
-
     private Token readSTag() {
         int charNo = getFirstSymbolNo();
 
@@ -482,6 +433,27 @@ public class Scanner {
         }
 
         return NO_NEXT_LOGICAL_SIGN;
+    }
+
+    public Scanner(String path) {
+        try {
+            fileInputStream = new FileInputStream(path);
+            InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, Charset.forName("ISO-8859-2"));
+
+            int b = inputStreamReader.read();
+            StringBuilder stringBuilder = new StringBuilder();
+
+            while(b != -1) {
+                stringBuilder.append((char)b);
+                b = inputStreamReader.read();
+            }
+
+            fileContent = stringBuilder.toString();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void print(){
